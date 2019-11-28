@@ -1,8 +1,11 @@
 import sys
 import os
 import os.path
+import copy
 import collections
 import ast
+
+
 
 import numpy
 import numpy as np
@@ -53,12 +56,15 @@ welder_model_output_dir = pkgdir
 exec(open(os.path.join(welder_model_output_dir,"welder_modeling_out.py")).read(),globals())
 
 
-default_welder_spring_constant=5000, # N/m -- bounciness of seals in welder pneumatic cylinder
+default_welder_spring_constant=5000 # N/m -- bounciness of seals in welder pneumatic cylinder
 default_R_contact=25.4e-3 # Hertzian contact parameter: 1 inch radius                  
-default_welder_elec_freq=19890.0, # Frequency, Hz
-default_dt=1e-6, # Time step, seconds
+default_welder_elec_freq=19890.0 # Frequency, Hz
+default_dt=1e-6 # Time step, seconds
 
 default_gpu_precision="single" # gpu_precision must be "single" or "double"
+
+contact_F_nominal = 100.0 # N -- nominal contact force used to decide to neglect imaginary parts order of magnitude smaller
+G_nominal = contact_F_nominal**(1.0/3.0)
 
 
 #specimen_model_output_dir = '.'
@@ -118,7 +124,7 @@ def select_gpu_device(priority_list_str):
             raise ValueError("No OpenCL devices found matching any entry in priority list %s. Use clinfo command to find platform name and device name. Priority list must be entered using list notation: \"[ ('platform1_name','device1_name'), ('platform2_name','device2_name') ]\"")
         context = cl.Context(devices=[device])
         queue = cl.CommandQueue(context)
-        gpu_context_device_queue = (device,context,queue)
+        gpu_context_device_queue = (context,device,queue)
         pass
     else:
         gpu_context_device_queue=None
@@ -129,16 +135,17 @@ def load_specimen_model(specimen_model_filepath):
     import pandas as pd
     specimen_dataframe = pd.read_csv(specimen_model_filepath,index_col=0)
     
-    dt=specimen_dataframe["Time(s)"][1]-specimen_dataframe["Time(s)"][0]
+    #dt=specimen_dataframe["Time(s)"][1]-specimen_dataframe["Time(s)"][0]
+    dt=specimen_dataframe.index[1]-specimen_dataframe.index[0]
 
-    assert(specimen_dataframe["Time(s)"][0]==0.0)
+    assert(specimen_dataframe.index[0]==0.0)
     
     specimen_dict=collections.OrderedDict()    
     for column in specimen_dataframe.columns:
         if column=="Time(s)":
             continue
         specimen_dict[column.split("(")[0]]=convolution.impulse_response(
-            h=specimen_dataframe[column],
+            h=np.array(specimen_dataframe[column]),
             dt=dt,
             t0=0.0,
             A=np.array((0,),dtype='d'),
@@ -274,7 +281,7 @@ def contact_model(specimen_dict,
     #E2=68.9e9
     
 
-    Estar = 1.0/( (1.0-nu1**2.0)/E1 + (1.0-nu2**2.0)/E2)
+    Estar = 1.0/( (1.0-nu1**2.0)/E1 + (1.0-specimen_nu**2.0)/specimen_E)
 
 
     # This spring represents the bounciness of the seals in the pneumatic cylinder... based on 20 ms resonant period, and assuming 2kg mass,
@@ -300,7 +307,7 @@ def contact_model(specimen_dict,
     # overall_pos = (specimen_quiescent_coeff - welder_quiescent_coeff)*pneumatic/(1.0 + specimen_quiescent_coeff*welder_spring_constant - welder_quiescent_coeff*welder_spring_constant)
 
 
-    welder_overall_pos = (convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp_local.A,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real)*pneumatic_force/(1.0 + convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real*welder_spring_constant - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp.A_local,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real*welder_spring_constant)
+    welder_overall_pos = (convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp_local.A,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real)*pneumatic_force/(1.0 + convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real*welder_spring_constant - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp_local.A,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real*welder_spring_constant)
 
 
     
@@ -318,7 +325,7 @@ def contact_model(specimen_dict,
     # specimen_conv for all the other characteristics of interest
     # (laser point velocity, crack normal stress, etc.)
     specimen_dict_conv=collections.OrderedDict()
-    specimen_dict_out=collections.OrderedDict()
+    specimen_dict_history=collections.OrderedDict()
     for specimen_motion_characteristic in specimen_dict:
         specimen_dict_conv[specimen_motion_characteristic] = convolution_evaluation.quiescent_from_imp_resp(specimen_dict[specimen_motion_characteristic],pneumatic_force-welder_overall_pos*welder_spring_constant,gpu_context_device_queue=gpu_context_device_queue,gpu_precision=gpu_precision)
 
@@ -354,7 +361,7 @@ def contact_model(specimen_dict,
 
     specimen_z_history=np.zeros(trange.shape[0],dtype='d')
     welder_tip_z_history=np.zeros(trange.shape[0],dtype='d')
-    Contact_F_history=np.zeros(trange.shape[0],dtype='d')
+    contact_F_history=np.zeros(trange.shape[0],dtype='d')
     welder_overall_velocity_history=np.zeros(trange.shape[0],dtype='d')
 
     for tcnt in range(trange.shape[0]):
@@ -362,9 +369,16 @@ def contact_model(specimen_dict,
             print("tcnt=%d/%d" % (tcnt,trange.shape[0]))
             pass
     
+
+
         #if tcnt==42890:
         #    raise ValueError("Debug!")
         
+        #if tcnt==3953: 
+        #    import pdb
+        #    pdb.set_trace()
+        #    pass
+
         specimen_z=specimen_conv.step_without_instantaneous()
         
         welder_overall_pos += welder_overall_velocity*dt
@@ -384,48 +398,50 @@ def contact_model(specimen_dict,
     
         # evaluate overlap
         overlap = welder_tip_z - specimen_z
+
+
         if overlap > 0:
             # Conditions
             # Define Fwelder positive compression into welder
             # Define Fspecimen positive compression into specimen
             # Fwelder = Fspecimen
-            # zshift_welder = initial_displacement*Fwelder*dt    # initial_displacement from welder model corresponds to displacement resulting from a 1 N*s impulse. Therefore it can be interpreted as have units of meters/(N*s) It is negative because the positive Contact_F pulse pushes the welder away from the vibrometer
+            # zshift_welder = initial_displacement*Fwelder*dt    # initial_displacement from welder model corresponds to displacement resulting from a 1 N*s impulse. Therefore it can be interpreted as have units of meters/(N*s) It is negative because the positive contact_F pulse pushes the welder away from the vibrometer
             # zshift_specimen = specimen_response[0]*Fspecimen*dt # Due to 1 N*s impulse... Should be positive
             # Add in contact springiness in series with
             # surface springiness:
-            #  zspring=Contact_F/kspring
+            #  zspring=contact_F/kspring
             # zshift_welder - zshift_specimen - zspring = -overlap (known)
             
             # Solve this sytem....
-            # let Contact_F = Fwelder = Fspecimen = Fspring
-            # initial_displacement*Contact_F*dt  - specimen_response[0]*Contact_F*dt - Contact_F/kspring = -overlap
+            # let contact_F = Fwelder = Fspecimen = Fspring
+            # initial_displacement*contact_F*dt  - specimen_response[0]*contact_F*dt - contact_F/kspring = -overlap
             # F = -overlap/(dt*(initial_displacement-specimen_resp[0]) - (1/kspring))
             
             # New Hertzian contact model
-            # initial_displacement*Contact_F*dt  - specimen_response[0]*Contact_F*dt - (9/(16Estar^2R))^(1/3) * Contact_F^(2/3) = -overlap
+            # initial_displacement*contact_F*dt  - specimen_response[0]*contact_F*dt - (9/(16Estar^2R))^(1/3) * contact_F^(2/3) = -overlap
             
-            # This is a cubic equation for Contact_F
+            # This is a cubic equation for contact_F
             # for a*F - b*F^(2/3) + c = 0
             # G = F^(1/3)
             # a*G^3 - b*G^2 + c = 0
             G = np.roots([np.real(welder_tip_tip_resp_local.h[0]*dt-specimen_resp.h[0]*dt),-(9.0/(16.0*R_contact*Estar**2.0))**(1.0/3.0),0.0,overlap])
-            use_G = G[(G.real > 0) & (G.imag==0.0)]
+            use_G = G[(G.real > 0) & (abs(G.imag) <= G_nominal*1e-8)].real
             if use_G.shape[0] != 1:
                 raise ValueError("Bad Hertzian contact solution: %s" % (str(G)))
             
-            Contact_F=use_G[0]**3.0
+            contact_F=use_G[0]**3.0
         
 
             # Old simple spring contact model here:
-            #Contact_F = -overlap/(dt*(np.real(welder_tip_tip_resp_local.h[0]-specimen_resp.h[0])) - 1.0/kspring)  # welder_tip_tip_resp_local.h[0] is negative... specimen_resp.h[0] is positive, overlap is positive, so Contact_F is positive for compressive force between
+            #contact_F = -overlap/(dt*(np.real(welder_tip_tip_resp_local.h[0]-specimen_resp.h[0])) - 1.0/kspring)  # welder_tip_tip_resp_local.h[0] is negative... specimen_resp.h[0] is positive, overlap is positive, so contact_F is positive for compressive force between
             # Welder and specimen
             # Accumulate immediate response to this force
             pass
         else:
-            Contact_F=0.0
+            contact_F=0.0
             pass
         
-        Contact_F_history[tcnt]=Contact_F
+        contact_F_history[tcnt]=contact_F
     
         
         # Need to convolve force history
@@ -434,27 +450,27 @@ def contact_model(specimen_dict,
         # At a particular time t, 
         # displacement = integral( F(t-tau) * response(tau)) dtau where tau >= 0
         
-        #welder_tip_z = welder_tip_z + Contact_F*welder_tip_tip_resp_local.h[0]*dt
-        #specimen_z = specimen_z + Contact_F*specimen_resp.h[0]*dt
+        #welder_tip_z = welder_tip_z + contact_F*welder_tip_tip_resp_local.h[0]*dt
+        #specimen_z = specimen_z + contact_F*specimen_resp.h[0]*dt
         
-        # Positive (compressive) Contact_F gives positive instantaneous
+        # Positive (compressive) contact_F gives positive instantaneous
         # contribution... specimen_z moves in +z direction (away from welder)
-        specimen_z += specimen_conv.step_instantaneous_contribution(Contact_F)
+        specimen_z += specimen_conv.step_instantaneous_contribution(contact_F)
 
         for specimen_motion_characteristic in specimen_dict_conv:
-            specimen_dict_history[specimen_motion_characteristic][tcnt] = specimen_dict_conv[specimen_motion_characteristic].step(Contact_F)
+            specimen_dict_history[specimen_motion_characteristic][tcnt] = specimen_dict_conv[specimen_motion_characteristic].step(contact_F)
             pass
         
         
-        # Positive (compressive) Contact_F gives negative instantaneous
+        # Positive (compressive) contact_F gives negative instantaneous
         # contribution... welder tip moves in -z direction (away from specimen)
         # Also need to apply contribution of welder electric input (but
         # the instantaneous effect of this is zero
-        welder_tip_z += welder_tip_tip_conv.step_instantaneous_contribution(Contact_F) + welder_elec_tip_conv.step_instantaneous_contribution(welder_elec_input)
+        welder_tip_z += welder_tip_tip_conv.step_instantaneous_contribution(contact_F) + welder_elec_tip_conv.step_instantaneous_contribution(welder_elec_input)
         
         # Apply the contribution to the electric response...
         # instantaneous effect is zero. 
-        welder_elec_resp_voltage = welder_tip_elec_conv.step_instantaneous_contribution(Contact_F) + welder_elec_elec_conv.step_instantaneous_contribution(welder_elec_input)
+        welder_elec_resp_voltage = welder_tip_elec_conv.step_instantaneous_contribution(contact_F) + welder_elec_elec_conv.step_instantaneous_contribution(welder_elec_input)
         assert(welder_elec_resp_voltage==0.0) # These should not have instantaneous responses!
         
     
@@ -470,14 +486,14 @@ def contact_model(specimen_dict,
         # F = ma  -> a = F/m
         # v = vprior + a*dt
         # v = vprior + (F/m)*dt
-        # Where F = pneumatic_force - Contact_F - welder_overall_dashpot*welder_overall_velocity
+        # Where F = pneumatic_force - contact_F - welder_overall_dashpot*welder_overall_velocity
         welder_spring_force = -welder_tip_z*welder_spring_constant + pneumatic_force    # use "pneumatic_force" parameter as spring preload
-        welder_overall_velocity += ((welder_spring_force-Contact_F - welder_overall_dashpot*welder_overall_velocity)/mass_of_welder_and_slider) * dt
+        welder_overall_velocity += ((welder_spring_force-contact_F - welder_overall_dashpot*welder_overall_velocity)/mass_of_welder_and_slider) * dt
         assert(np.imag(welder_overall_velocity)==0.0)
         
         welder_overall_velocity_history[tcnt]=welder_overall_velocity
         
-        #if tcnt >= 80890 and Contact_F > 0:
+        #if tcnt >= 80890 and contact_F > 0:
         #raise ValueError("Debug!")
         #    break
         pass
@@ -494,7 +510,7 @@ def contact_model(specimen_dict,
     motiontable.insert(len(motiontable.columns),"welder_overall_velocity_history(m/s)",welder_overall_velocity_history)
 
     motiontable.insert(len(motiontable.columns),"welder_tip_tip_resp(m/(N*s))",welder_tip_tip_resp_local.eval(np.arange(trange.shape[0])).real)
-    motiontable.insert(len(motiontable.columns),"specimen_resp(m/(N*s))",specimen_resp_local.eval(np.arange(trange.shape[0])).real)
+    motiontable.insert(len(motiontable.columns),"specimen_resp(m/(N*s))",specimen_resp.eval(np.arange(trange.shape[0])).real)
     
     for specimen_motion_characteristic in specimen_dict_history:
         motiontable.insert(len(motiontable.columns),specimen_motion_characteristic,specimen_dict_history[specimen_motion_characteristic])
@@ -516,7 +532,7 @@ def write_motiontable(motiontable,output_filename):
 
 def plot_contact(motiontable):
 
-    trange = motiontable["Time(s)"]
+    trange = np.array(motiontable.index) # ["Time(s)"]
     dt=trange[1]-trange[0]
 
     difft = (trange[:-1]+trange[1:])/2.0
@@ -600,8 +616,8 @@ def plot_contact(motiontable):
     contactforce_plot = pl.figure()
     pl.clf()
     # Impulse between .28*.33
-    Impulse=Contact_F_history[(trange >.28e-3) & (trange < .33e-3)].sum()*dt
-    pl.plot(trange*1e3,Contact_F_history)
+    Impulse=contact_F_history[(trange >.28e-3) & (trange < .33e-3)].sum()*dt
+    pl.plot(trange*1e3,contact_F_history)
     pl.axis((0,max_t_plot*1.e3,0,20000))
     pl.xlabel('Time (ms)')
     pl.ylabel('Force (N)')
@@ -616,7 +632,7 @@ def plot_contact(motiontable):
     contactspectrum_plot = pl.figure()
     pl.clf()
     # Impulse between .28*.33
-    pl.plot(frange/1e3,np.abs(np.fft.fft(Contact_F_history)*dt))
+    pl.plot(frange/1e3,np.abs(np.fft.fft(contact_F_history)*dt))
     #pl.axis((0,max_t_plot*1.e3,0,20000))
     pl.xlabel('Frequency (kHz)')
     pl.ylabel('Force spectrum (N/Hz)')

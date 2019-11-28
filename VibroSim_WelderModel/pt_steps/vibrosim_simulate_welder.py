@@ -2,8 +2,24 @@ import os
 import os.path
 import sys
 
-from dc_value import numericunitsvalue as numericunitsv
-from dc_value import hrefvalue as hrefv
+try:
+    # py2.x
+    from urllib import pathname2url
+    from urllib import url2pathname
+    from urllib import quote
+    from urllib import unquote
+    pass
+except ImportError:
+    # py3.x
+    from urllib.request import pathname2url
+    from urllib.request import url2pathname
+    from urllib.parse import quote
+    from urllib.parse import unquote
+    pass
+
+
+from limatix.dc_value import numericunitsvalue as numericunitsv
+from limatix.dc_value import hrefvalue as hrefv
 
 from VibroSim_WelderModel import contact_model
 
@@ -45,7 +61,7 @@ def run(dc_dest_href,
 
     # Save motiontable CSV and add to return dictionary
     motiontable_href = hrefv(quote("%s_motiontable.csv.bz2" % (dc_measident_str)),dc_dest_href)
-    write_motiontable(motiontable,motiontable_href.getpath())
+    contact_model.write_motiontable(motiontable,motiontable_href.getpath())
     ret = {
         "dc:motion": motiontable_href,
     }

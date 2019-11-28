@@ -351,13 +351,14 @@ class convolution_evaluation(object):
             n = self.imp_resp.h.shape[0]
             assert(n==self.history.shape[0])
             self.gpu_workitems = self.gpu_work_group_size * work_group_size_multiple
-            self.gpu_iters_per_workitem = int(np.ceil(n/self.gpu_workitems))
+            self.gpu_iters_per_workitem = int(np.ceil(n*1.0/self.gpu_workitems))
 
             print("work_group_size = %d; size_multiple=%d; n=%d; workitems=%d; iters_per_workitem=%d" % (self.gpu_work_group_size,work_group_size_multiple,n,self.gpu_workitems,self.gpu_iters_per_workitem)) 
             
             self.gpu_history_buffer=cl.Buffer(self.gpu_context_device_queue[0],cl.mem_flags.READ_ONLY|cl.mem_flags.COPY_HOST_PTR,hostbuf=self.history)
 
-            self.gpu_hreverse_buffer=cl.Buffer(self.gpu_context_device_queue[0],cl.mem_flags.READ_ONLY|cl.mem_flags.COPY_HOST_PTR,hostbuf=np.ascontiguousarray(self.imp_resp.h[::-1].astype(floattype)))
+            self.gpu_hreverse_array = np.ascontiguousarray(self.imp_resp.h[::-1].astype(floattype))
+            self.gpu_hreverse_buffer=cl.Buffer(self.gpu_context_device_queue[0],cl.mem_flags.READ_ONLY|cl.mem_flags.COPY_HOST_PTR,hostbuf = self.gpu_hreverse_array)
             self.gpu_accumulator = np.zeros(self.gpu_workitems,dtype=floattype)
             self.gpu_accumulator_buffer=cl.Buffer(self.gpu_context_device_queue[0],cl.mem_flags.WRITE_ONLY,size=self.gpu_accumulator.nbytes)
 
@@ -509,7 +510,14 @@ class convolution_evaluation(object):
                 pass
 
             pass
-        
+
+        #F_last_n_dt_debug = np.roll(self.history,-self.history_nextpos)
+        #res_debug = np.inner(F_last_n_dt_debug,self.imp_resp.h[::-1])*self.imp_resp.dt
+        # 
+        #print("res=%g; res_debug=%g" % (res,res_debug))
+        #if not ((abs(res_debug) < 1e-5 and abs(res) < 1e-5) or abs((res-res_debug)/res_debug) < 1e-2):
+        #    raise ValueError("calculation error!")
+
         #print("terms=%s,factor1=%s,factor2=%s" % (str(F_last_n_dt*self.imp_resp.h[::-1]),str(F_last_n_dt),str(self.imp_resp.h[::-1])))
         # in quiescent equilibrium,
         # history=constant_force, so res = integral(constant_force*h)dt
