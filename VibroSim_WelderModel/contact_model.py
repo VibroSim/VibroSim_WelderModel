@@ -1,7 +1,8 @@
-
+import sys
 import os
 import os.path
 import collections
+import ast
 
 import numpy
 import numpy as np
@@ -11,8 +12,8 @@ import pandas as pd
 from matplotlib import pyplot as pl
 #import pyximport
 #pyximport.install()
-import convolution
-from convolution import impulse_response,convolution_evaluation
+from . import convolution
+from .convolution import impulse_response,convolution_evaluation
 
 
 #
@@ -73,13 +74,64 @@ default_gpu_precision="single" # gpu_precision must be "single" or "double"
 
 #specimen_model_fpath=os.path.join(specimen_model_output_dir,specimen_model_fname)
 
+
+def select_gpu_device(priority_list_str):
+    """Based on a priority list string of the form:
+     [
+       ('NVIDIA CUDA','Quadro GP100'), 
+       ('Intel(R) OpenCL HD Graphics','Intel(R) Gen9 HD Graphics NEO'), 
+       ('Portable Computing Language','pthread-AMD EPYC 7351P 16-Core Processor')
+     ]
+    select the first of these devices found and return (context,device,queue).
+    If priority_list_str=="" then None will be returned. 
+    Otherwise a ValueError or other error will be raised if the 
+    string is not parseable or if the device is not found. 
+    
+    Each entry in the list is (Platform Name, Device Name)
+    The available platforms and devices can be found by looking
+    at the output of the "clinfo" command. 
+    """
+    
+    if priority_list_str != "":
+        import pyopencl as cl
+        gpu_device_priority_list = ast.literal_eval(priority_list_str)
+        platforms=cl.get_platforms()
+        platforms_byname = { platform.name: platform for platform in platforms }
+
+        device = None
+        
+        for (gpu_platform_name,gpu_device_name) in gpu_device_priority_list:
+            
+            if gpu_platform_name in platforms_byname:
+                platform = platforms_byname[gpu_platform_name]
+
+                devices=platform.get_devices()
+                devices_byname = { device.name: device for device in devices }
+
+                if gpu_device_name in devices_byname:
+                    device=devices_byname[gpu_device_name]
+                    break
+                pass
+            pass
+        
+        if device is None:
+            raise ValueError("No OpenCL devices found matching any entry in priority list %s. Use clinfo command to find platform name and device name. Priority list must be entered using list notation: \"[ ('platform1_name','device1_name'), ('platform2_name','device2_name') ]\"")
+        context = cl.Context(devices=[device])
+        queue = cl.CommandQueue(context)
+        gpu_context_device_queue = (device,context,queue)
+        pass
+    else:
+        gpu_context_device_queue=None
+        pass
+    return gpu_context_device_queue
+
 def load_specimen_model(specimen_model_filepath):
     import pandas as pd
     specimen_dataframe = pd.read_csv(specimen_model_filepath,index_col=0)
     
-    dt=specimen_dataframe["Time(s)")[1]-specimen_dataframe["Time(s)")[0]
+    dt=specimen_dataframe["Time(s)"][1]-specimen_dataframe["Time(s)"][0]
 
-    assert(specimen_dataframe["Time(s)")[0]==0.0)
+    assert(specimen_dataframe["Time(s)"][0]==0.0)
     
     specimen_dict=collections.OrderedDict()    
     for column in specimen_dataframe.columns:
@@ -105,7 +157,7 @@ def contact_model(specimen_dict,
                   welder_elec_ampl, # Amplitude (au...? should be volts)
                   specimen_E, specimen_nu, # Specimen elastic params
                   welder_spring_constant=default_welder_spring_constant, # N/m -- bounciness of seals in welder pneumatic cylinder
-                  R_contact=default_R_contact # Hertzian contact parameter: 1 inch radius                  
+                  R_contact=default_R_contact, # Hertzian contact parameter: 1 inch radius                  
                   welder_elec_freq=default_welder_elec_freq, # Frequency, Hz
                   dt=default_dt, # Time step, seconds
                   gpu_context_device_queue=None,                  
