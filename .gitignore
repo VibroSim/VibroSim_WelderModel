@@ -1,0 +1,10 @@
+*.pyc
+*__pycache__*
+*~
+*.bak
+*_output
+*.xlp
+*.pro
+*.swp
+build
+dist
