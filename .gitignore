@@ -8,3 +8,4 @@
 *.swp
 build
 dist
+VibroSim_WelderModel/convolution.c
