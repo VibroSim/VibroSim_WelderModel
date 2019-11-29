@@ -394,7 +394,7 @@ def contact_model(specimen_dict,
         
         # Welder elec input  --- Could include welder controller behavior here (based on welder_elec_resp_voltage and its history)
         
-        if trange[tcnt] >= t0_t1 and trange[tcnt] <= t1_t2:
+        if trange[tcnt] >= t0_t1 and trange[tcnt] <= t2_t3:
             welder_elec_input = welder_elec_ampl*np.cos(2*np.pi*welder_elec_freq*(trange[tcnt]-t0_t1))
             pass
         else:
