@@ -26,7 +26,11 @@ from VibroSim_WelderModel import contact_model
 def run(dc_dest_href,
         dc_measident_str,
         dc_dynamicmodel_href,
-        dc_max_t_numericunits,
+        dc_exc_t0_numericunits, # Turn-on time
+        dc_exc_t1_numericunits, # Full amplitude time (must match turn-on time
+        dc_exc_t2_numericunits, # Amplitude decay start
+        dc_exc_t3_numericunits, # Turn-off time (must match amplitude decay start)
+        dc_exc_t4_numericunits, # End of simulation 
         dc_mass_of_welder_and_slider_numericunits,
         dc_pneumatic_force_numericunits,
         dc_welder_elec_ampl_float,
@@ -44,9 +48,18 @@ def run(dc_dest_href,
 
     gpu_context_device_queue = contact_model.select_gpu_device(dc_gpu_device_priority_list_str)
         
-    
+    assert(dc_exc_t0_numericunits.value("s")==dc_exc_t1_numericunits.value("s"))
+    assert(dc_exc_t2_numericunits.value("s")==dc_exc_t3_numericunits.value("s"))
+
+
+    if dc_exc_t4_numericunits.value("s") < dc_exc_t3_numericunits.value("s"):
+        print("vibrosim_simulate_welder: WARNING: Simulation ends prior to turn-off time.\nVibration may be truncated!")
+        pass
+        
     motiontable = contact_model.contact_model(specimen_dict,
-                                              dc_max_t_numericunits.value("s"),
+                                              dc_exc_t0_numericunits.value("s"),
+                                              dc_exc_t2_numericunits.value("s"),
+                                              dc_exc_t4_numericunits.value("s"),
                                               dc_mass_of_welder_and_slider_numericunits.value("kg"),
                                               dc_pneumatic_force_numericunits.value("N"),
                                               dc_welder_elec_ampl_float,

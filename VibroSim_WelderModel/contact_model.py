@@ -158,7 +158,9 @@ def load_specimen_model(specimen_model_filepath):
 
 
 def contact_model(specimen_dict,
-                  max_t, # Time to calculate out to (seconds)
+                  t0_t1, # Excitation start time (seconds)
+                  t2_t3, # Excitation end time (seconds)
+                  t4, # Time to calculate out to (seconds)
                   mass_of_welder_and_slider, # mass, kg
                   pneumatic_force, # Force, N
                   welder_elec_ampl, # Amplitude (au...? should be volts)
@@ -225,7 +227,7 @@ def contact_model(specimen_dict,
     #max_t = 0.1
     #max_t = 0.3
     #max_t=0.2
-    trange = np.arange(max_t/dt)*dt
+    trange = np.arange(t4/dt)*dt
     
     #mass_of_welder_and_slider=2.0   # mass, kg !!!*** Need to properly measure
     #pneumatic_force = 300 # Force, N  ***!!! Not necessarily representative
@@ -392,8 +394,13 @@ def contact_model(specimen_dict,
         
         # Welder elec input  --- Could include welder controller behavior here (based on welder_elec_resp_voltage and its history)
         
-        welder_elec_input = welder_elec_ampl*np.cos(2*np.pi*welder_elec_freq*trange[tcnt])
-        
+        if trange[tcnt] >= t0_t1 and trange[tcnt] <= t1_t2:
+            welder_elec_input = welder_elec_ampl*np.cos(2*np.pi*welder_elec_freq*(trange[tcnt]-t0_t1))
+            pass
+        else:
+            welder_elec_input = 0.0
+            pass
+
         # Determine contact force from overlap
     
         # evaluate overlap
