@@ -587,9 +587,9 @@ def plot_contact(motiontable):
     pl.clf()
     pl.title("Welder and specimen velocity phase spectrum")
     pl.plot(frange/1e3,
-            np.angle(np.fft.fft(motiontable["welder_tip_tip_resp(m/(N*s))"])*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'-',
+            np.angle(-np.fft.fft(motiontable["welder_tip_tip_resp(m/(N*s))"])*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'-',
             frange/1e3,
-            np.angle(-np.fft.fft(motiontable["specimen_resp(m/(N*s))"])*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'--')
+            np.angle(np.fft.fft(motiontable["specimen_resp(m/(N*s))"])*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'--')
     pl.xlabel('Frequency (kHz)')
     pl.ylabel('Phase angle (rad)')
     pl.legend(('Welder','Specimen'))
