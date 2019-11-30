@@ -1,3 +1,12 @@
+import os
+import os.path
+import sys
+import tempfile
+
+import numpy as np
+from matplotlib import pyplot as pl
+import pandas as pd
+
 from VibroSim_WelderModel import contact_model
 
 # Uncomment this and comment out below to disable GPU use
@@ -13,8 +22,13 @@ gpu_context_device_queue = contact_model.select_gpu_device(gpu_device_priority_l
 
 gpu_precision="single"
 
-specimen_model_file="example_specimen_model.csv.bz2"
-max_t = 0.2 # s
+#specimen_model_file="example_specimen_model.csv.bz2"
+specimen_model_file="/tmp/meas1_dynamicmodel.csv.bz2"
+# You can accept the specimen model file as a command line
+# parameter within python or ipython by specifying:
+#specimen_model_file=sys.argv[1]
+
+max_t = 0.05 # s
 mass_of_welder_and_slider = 2.0 # kg
 pneumatic_force = 100.0 # N
 
@@ -43,9 +57,13 @@ motiontable = contact_model.contact_model(specimen_dict,
                                           R_contact=R_contact,
                                           welder_elec_freq=welder_elec_freq,
                                           gpu_context_device_queue=gpu_context_device_queue,
-                                          gpu_precision=dc_gpu_precision_str)
+                                          gpu_precision=gpu_precision)
 
+tempdir = tempfile.gettempdir()
+savename = os.path.join(tempdir,"weldermodel_motiontable.csv.bz2")
+print("Saving welder motion in tabular form as %s..." % (savename))
 
+contact_model.write_motiontable(motiontable,savename)
 plotdict = contact_model.plot_contact(motiontable)
 
 pl.show()

@@ -80,8 +80,8 @@ conv_pyx_ext.libraries=['gomp','OpenCL']
 
 
 
-#console_scripts=[ "vibro_estparam" ]
-#console_scripts_entrypoints = [ "%s = vibro_estparam.bin.%s:main" % (script,script.replace("-","_")) for script in console_scripts ]
+console_scripts=[ "vibrosim_plot_welder_motion" ]
+console_scripts_entrypoints = [ "%s = VibroSim_WelderModel.bin.%s:main" % (script,script.replace("-","_")) for script in console_scripts ]
 
 
 
@@ -92,11 +92,11 @@ setup(name="VibroSim_WelderModel",
       url="http://thermal.cnde.iastate.edu",
       zip_safe=False,
       ext_modules=ext_modules,
-      packages=["VibroSim_WelderModel"], # ,"VibroSim_WelderModel.bin"],
+      packages=["VibroSim_WelderModel","VibroSim_WelderModel.bin"],
       cmdclass={"install_lib": install_lib_save_version },
       package_data={"VibroSim_WelderModel": VibroSim_WelderModel_package_files},
       entry_points={ "limatix.processtrak.step_url_search_path": [ "limatix.share.pt_steps = VibroSim_WelderModel:getstepurlpath" ],
-                     #"console_scripts": console_scripts_entrypoints,
+                     "console_scripts": console_scripts_entrypoints,
                  },
       python_requires='>=2.7.0')
 
