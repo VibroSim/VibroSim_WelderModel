@@ -56,6 +56,12 @@ welder_model_output_dir = pkgdir
 exec(open(os.path.join(welder_model_output_dir,"welder_modeling_out.py")).read(),globals())
 
 
+## Temporarily zero out welder_tip_tip_resp for convergence testing
+#welder_tip_tip_resp.h[:]=0.0
+#welder_tip_tip_resp.h[:10]=-1e-28
+#welder_tip_tip_resp.h[1]=-1e-28
+#welder_tip_tip_resp.A[:]=0.0
+
 default_welder_spring_constant=5000 # N/m -- bounciness of seals in welder pneumatic cylinder
 default_R_contact=25.4e-3 # Hertzian contact parameter: 1 inch radius                  
 default_welder_elec_freq=19890.0 # Frequency, Hz
@@ -175,8 +181,16 @@ def contact_model(specimen_dict,
     # specimen_model defines specimen_resp, specimen_mobility, specimen_laser,
     # specimen_crackcenternormalstrain, and specimen_crackcentershearstrain
     
+    ## temporarily hardwire gpu_precision to double
+    #gpu_precision="double"
+    #gpu_context_device_queue=None # Temporarily disable GPU
 
     #specimen_dict=load_specimen_model(specimen_model_fpath)
+
+    # IDEA: Add small uniform real part to specimen_resp in frequency domain
+    # To keep the phase away from the edge.... FAILED
+
+    # IDEA: Add damping to Hertzian contact spring
 
     # Resample specimen data to desired dt value
     for key in specimen_dict:
@@ -190,6 +204,9 @@ def contact_model(specimen_dict,
         del specimen_dict["specimen_mobility"] # Don't care about predicting specimen contact velocity
         pass 
     
+    ## Temporarily zero out specimen_resp
+    #specimen_resp.h[:]=0.0
+
     assert(welder_elec_tip_resp.h[0]==0.0) # response of tip to electrical excitation MUST be delayed
     assert(welder_elec_elec_resp.h[0]==0.0) # electrical response to electrical excitation MUST be delayed
     assert(welder_tip_elec_resp.h[0]==0.0) # electrical response to tip impulse MUST be delayed
@@ -308,8 +325,12 @@ def contact_model(specimen_dict,
     # overall_pos*(1.0 + specimen_quiescent_coeff*welder_spring_constant - welder_quiescent_coeff*welder_spring_constant) = (specimen_quiescent_coeff - welder_quiescent_coeff)*pneumatic
     # overall_pos = (specimen_quiescent_coeff - welder_quiescent_coeff)*pneumatic/(1.0 + specimen_quiescent_coeff*welder_spring_constant - welder_quiescent_coeff*welder_spring_constant)
 
+    # Hertzian equilibrium displacement:
+    # Displacement = (9/(16Estar^2R))^(1/3) * contact_F^(2/3)
+    initial_contact_displacement = (9.0/(16.0*R_contact*Estar**2.0))**(1.0/3.0) * pneumatic_force**(2.0/3.0)
+    
 
-    welder_overall_pos = (convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp_local.A,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real)*pneumatic_force/(1.0 + convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real*welder_spring_constant - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp_local.A,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real*welder_spring_constant)
+    welder_overall_pos = (convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp_local.A,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real)*pneumatic_force/(1.0 + convolution_evaluation.quiescent_value(1.0,specimen_resp.A,specimen_resp.alpha,specimen_resp.dt,specimen_resp.h).real*welder_spring_constant - convolution_evaluation.quiescent_value(1.0,welder_tip_tip_resp_local.A,welder_tip_tip_resp_local.alpha,welder_tip_tip_resp_local.dt,welder_tip_tip_resp_local.h).real*welder_spring_constant) + initial_contact_displacement
 
 
     
