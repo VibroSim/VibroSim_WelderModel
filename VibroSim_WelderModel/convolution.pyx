@@ -473,7 +473,7 @@ class convolution_evaluation(object):
         self.history_nextpos = (self.history_nextpos+1) % self.imp_resp.h.shape[0]
 
 
-        return evaluate(self)
+        return self.evaluate()
     
     def evaluate(self):
         #F_last_n_dt = np.roll(self.history,-self.history_nextpos)
