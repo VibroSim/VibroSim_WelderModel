@@ -298,6 +298,8 @@ class convolution_evaluation(object):
                  # recent n samples we are convolving with,
                  # where n is the length of imp_resp.h
     history_nextpos=None # Next position to use in history buffer
+    veryold_F=None # Force that has just cycled off the history buffer.
+    
     last_exponential_innerproduct = None
                          # Length m array representing             
                          #   sum_tau=-infty..(t-n*dt) F(tau)A_j*exp(-alpha_j*(t-tau))*imp_resp.dt
@@ -457,7 +459,7 @@ class convolution_evaluation(object):
         If new_t - old_t is not essentially equal to 
         imp_res.dt, the behavior is undefined"""
         
-        veryold_F = self.history[self.history_nextpos] # extract old F from h(t) portion for use in exponential portion
+        self.veryold_F = self.history[self.history_nextpos] # extract old F from h(t) portion for use in exponential portion
         
         # For h(t) portion, 
         # Convolution = sum_tau=(t-n*dt)..t F(tau)h(t-tau)*dt
@@ -469,7 +471,11 @@ class convolution_evaluation(object):
         
         # increment history_nextpos
         self.history_nextpos = (self.history_nextpos+1) % self.imp_resp.h.shape[0]
-        
+
+
+        return evaluate(self)
+    
+    def evaluate(self):
         #F_last_n_dt = np.roll(self.history,-self.history_nextpos)
         #res = np.inner(F_last_n_dt,self.imp_resp.h[::-1])*self.imp_resp.dt
 
@@ -523,7 +529,7 @@ class convolution_evaluation(object):
         # history=constant_force, so res = integral(constant_force*h)dt
         #print("res = %g" % (res))
         # exponential portion
-        new_exponential_innerproduct = self.last_exponential_innerproduct*np.exp(-self.imp_resp.alpha*self.imp_resp.dt) + veryold_F*self.imp_resp.A*np.exp(-self.imp_resp.alpha*self.imp_resp.dt*self.imp_resp.h.shape[0])*self.imp_resp.dt
+        new_exponential_innerproduct = self.last_exponential_innerproduct*np.exp(-self.imp_resp.alpha*self.imp_resp.dt) + self.veryold_F*self.imp_resp.A*np.exp(-self.imp_resp.alpha*self.imp_resp.dt*self.imp_resp.h.shape[0])*self.imp_resp.dt
 
         # in quiescent equilibrium,
         # new_exponential_innerproduct = last_exponential_innerproduct
@@ -563,6 +569,7 @@ class convolution_evaluation(object):
     def blank_from_imp_resp(cls,imp_resp,real=True,gpu_context_device_queue=None,gpu_precision=None):
         return cls(imp_resp=imp_resp,
                    history=np.zeros(imp_resp.h.shape[0],dtype='d'),
+                   veryold_F=0.0,
                    history_nextpos=0,
                    last_exponential_innerproduct=np.zeros(imp_resp.A.shape[0],dtype='D'),
                    real=real,
@@ -573,6 +580,7 @@ class convolution_evaluation(object):
     def quiescent_from_imp_resp(cls,imp_resp,constant_force,real=True,gpu_context_device_queue=None,gpu_precision=None):
         return cls(imp_resp=imp_resp,
                    history=np.ones(imp_resp.h.shape[0],dtype='d')*constant_force,
+                   veryold_F=constant_force,
                    history_nextpos=0,
                    last_exponential_innerproduct=cls.quiescent_exponential_innerproduct(constant_force,imp_resp.A,imp_resp.alpha,imp_resp.dt,imp_resp.h),
                    real=real,
