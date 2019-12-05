@@ -387,6 +387,13 @@ def contact_model(specimen_dict,
     contact_F_history=np.zeros(trange.shape[0],dtype='d')
     welder_overall_velocity_history=np.zeros(trange.shape[0],dtype='d')
 
+    welder_tip_z=welder_tip_tip_conv.evaluate() + welder_elec_tip_conv.evaluate() + welder_overall_pos
+
+    specimen_z=specimen_conv.evaluate()
+    
+    
+    last_overlap = welder_tip_z - specimen_z
+
     for tcnt in range(trange.shape[0]):
         if tcnt % 10000 == 0:
             print("tcnt=%d/%d" % (tcnt,trange.shape[0]))
@@ -425,7 +432,7 @@ def contact_model(specimen_dict,
         # Determine contact force from overlap
     
         # evaluate overlap
-        overlap = welder_tip_z - specimen_z
+        overlap = welder_tip_z - specimen_z  # overlap represents amount of overalp between welder and specimen if no force is applied in this step
 
 
         if overlap > 0:
@@ -433,7 +440,7 @@ def contact_model(specimen_dict,
             # Define Fwelder positive compression into welder
             # Define Fspecimen positive compression into specimen
             # Fwelder = Fspecimen
-            # zshift_welder = initial_displacement*Fwelder*dt    # initial_displacement from welder model corresponds to displacement resulting from a 1 N*s impulse. Therefore it can be interpreted as have units of meters/(N*s) It is negative because the positive contact_F pulse pushes the welder away from the vibrometer
+            # zshift_welder = instantaneous_welder_displacement*Fwelder*dt    # instantaneous_welder_displacement from welder model corresponds to displacement resulting from a 1 N*s impulse. Therefore it can be interpreted as have units of meters/(N*s) It is negative because the positive contact_F pulse pushes the welder away from the vibrometer
             # zshift_specimen = specimen_response[0]*Fspecimen*dt # Due to 1 N*s impulse... Should be positive
             # Add in contact springiness in series with
             # surface springiness:
@@ -442,11 +449,11 @@ def contact_model(specimen_dict,
             
             # Solve this sytem....
             # let contact_F = Fwelder = Fspecimen = Fspring
-            # initial_displacement*contact_F*dt  - specimen_response[0]*contact_F*dt - contact_F/kspring = -overlap
-            # F = -overlap/(dt*(initial_displacement-specimen_resp[0]) - (1/kspring))
+            # instantaneous_welder_displacement*contact_F*dt  - specimen_response[0]*contact_F*dt - contact_F/kspring = -overlap
+            # F = -overlap/(dt*(instantaneous_welder_displacement-specimen_resp[0]) - (1/kspring))
             
             # New Hertzian contact model
-            # initial_displacement*contact_F*dt  - specimen_response[0]*contact_F*dt - (9/(16Estar^2R))^(1/3) * contact_F^(2/3) = -overlap
+            # instantaneous_welder_displacement*contact_F*dt  - specimen_response[0]*contact_F*dt - (9/(16Estar^2R))^(1/3) * contact_F^(2/3) = -nocontactforce_overlap
             
             # This is a cubic equation for contact_F
             # for a*F - b*F^(2/3) + c = 0
@@ -524,6 +531,7 @@ def contact_model(specimen_dict,
         #if tcnt >= 80890 and contact_F > 0:
         #raise ValueError("Debug!")
         #    break
+        last_overlap = new_overlap
         pass
     # !!! Need conservation of energy constraint !!!***
     # Would it help to make contact more compliant (don't require
