@@ -13,7 +13,7 @@ static void opencl_update_history_element(void *queue_ptr, void *buffer_ptr,unsi
   buffer=(cl_mem)buffer_ptr;
 
   offset=indexoffset*elsize;
-  clEnqueueWriteBuffer(queue,buffer,1,offset,elsize,((char *)buffer_ptr)+offset,0,NULL,NULL);
+  clEnqueueWriteBuffer(queue,buffer,1,offset,elsize,((char *)hist_array)+offset,0,NULL,NULL);
   
 }
 
