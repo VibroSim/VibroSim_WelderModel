@@ -7,9 +7,97 @@ import re
 from setuptools import setup
 from setuptools.command.install_lib import install_lib
 from setuptools.command.install import install
+from setuptools.command.build_ext import build_ext
 import setuptools.command.bdist_egg
 import sys
 from Cython.Build import cythonize
+
+
+extra_compile_args = {
+    "msvc": ["/openmp"],
+    #"gcc": ["-O0", "-g", "-Wno-uninitialized"),    # Replace the line below with this line to enable debugging of the compiled extension
+    "gcc": ["-fopenmp","-O5","-Wno-uninitialized"],
+    "clang": ["-fopenmp","-O5","-Wno-uninitialized"],
+}
+
+extra_include_dirs = {
+    "msvc": [".",np.get_include()],
+    "gcc": [".",np.get_include()],
+    "clang": [".",np.get_include()],
+}
+
+extra_libraries = {
+    "msvc": [],
+    "gcc": ["gomp",],
+    "clang": [],
+}
+
+extra_link_args = {
+    "msvc": [],
+    "gcc": [],
+    "clang": ["-fopenmp=libomp"],
+}
+
+def check_for_opencl(compiler,include_dirs,library_dirs):
+    got_include=False
+    got_library=False
+    
+    for include_dir in include_dirs:
+        if os.path.exists(os.path.join(include_dir,"CL","cl.h")):
+            got_include=True
+            pass
+        pass
+
+    if compiler=="msvc" or compiler=="mingw":
+        for library_dir in library_dirs:
+            if os.path.exists(os.path.join(library_dir,"OpenCL.lib")):
+                got_library=True
+                pass
+            pass
+
+        pass
+    else: 
+        for library_dir in library_dirs:
+            if os.path.exists(os.path.join(library_dir,"libOpenCL.so")):
+                got_library=True
+                pass
+            pass
+        pass
+
+    return (got_include and got_library)
+
+
+class build_ext_compile_args(build_ext):
+    def build_extensions(self):
+        compiler=self.compiler.compiler_type
+        for ext in self.extensions:
+            if compiler in extra_compile_args:
+                ext.extra_compile_args=extra_compile_args[compiler]
+                ext.extra_link_args=extra_link_args[compiler]
+                ext.include_dirs.extend(list(extra_include_dirs[compiler]))
+                ext.libraries.extend(list(extra_libraries[compiler]))
+
+                opencl_include_and_libraries = check_for_opencl(compiler,ext.include_dirs,ext.library_dirs)
+                if opencl_include_and_libraries:
+                    ext.define_macros.append( ("CONVOLUTION_ENABLE_OPENCL",None) )
+                    ext.libraries.append("OpenCL")
+                    pass
+                
+                pass
+            else:
+                # use gcc parameters as default
+                ext.extra_compile_args=extra_compile_args["gcc"]
+                ext.extra_link_args=extra_link_args["gcc"]
+                ext.include_dirs.extend(list(extra_include_dirs["gcc"]))
+                ext.libraries.extend(extra_libraries["gcc"])
+                pass
+                
+            pass
+            
+        
+        build_ext.build_extensions(self)
+        pass
+    pass
 
 
 
@@ -70,13 +158,13 @@ print("version = %s" % (version))
 
 VibroSim_WelderModel_package_files = [ "pt_steps/*" ]
 
-ext_modules=cythonize("VibroSim_WelderModel/convolution.pyx")
-em_dict=dict([ (module.name,module) for module in ext_modules])
-conv_pyx_ext=em_dict["VibroSim_WelderModel.convolution"]
-conv_pyx_ext.include_dirs=["."]
-#conv_pyx_ext.extra_compile_args=['-O0','-g']
-conv_pyx_ext.extra_compile_args=['-fopenmp','-O5']
-conv_pyx_ext.libraries=['gomp','OpenCL']
+ext_modules=cythonize("VibroSim_WelderModel/convolution.pyx",language="c++)
+#em_dict=dict([ (module.name,module) for module in ext_modules])
+#conv_pyx_ext=em_dict["VibroSim_WelderModel.convolution"]
+#conv_pyx_ext.include_dirs=["."]
+##conv_pyx_ext.extra_compile_args=['-O0','-g']
+#conv_pyx_ext.extra_compile_args=['-fopenmp','-O5']
+#conv_pyx_ext.libraries=['gomp','OpenCL']
 
 
 
@@ -93,7 +181,8 @@ setup(name="VibroSim_WelderModel",
       zip_safe=False,
       ext_modules=ext_modules,
       packages=["VibroSim_WelderModel","VibroSim_WelderModel.bin"],
-      cmdclass={"install_lib": install_lib_save_version },
+      cmdclass={"install_lib": install_lib_save_version,
+                "build_ext": build_ext_compile_args,},
       package_data={"VibroSim_WelderModel": VibroSim_WelderModel_package_files},
       entry_points={ "limatix.processtrak.step_url_search_path": [ "limatix.share.pt_steps = VibroSim_WelderModel:getstepurlpath" ],
                      "console_scripts": console_scripts_entrypoints,

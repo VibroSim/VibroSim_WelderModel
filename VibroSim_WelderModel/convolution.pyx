@@ -1,10 +1,3 @@
-# To use:
-# import pyximport
-# pyximport.install()
-# import convolution
- 
-
-# OLD, DON'T DO THIS to rebuild: cythonize -i convolution.pyx
 
 import copy
 cimport numpy as np
@@ -16,24 +9,29 @@ import scipy.signal
 from libc.stdint cimport int64_t
 #from libc.stdio cimport printf
 
-cdef extern from "CL/opencl.h":
-  ctypedef int cl_int
-  ctypedef void *cl_command_queue
-  ctypedef void *cl_mem
-  ctypedef int cl_bool
-  ctypedef unsigned cl_uint
-  ctypedef void *cl_event
+#cdef extern from "CL/opencl.h":
+#  ctypedef int cl_int
+#  ctypedef void *cl_command_queue
+#  ctypedef void *cl_mem
+#  ctypedef int cl_bool
+#  ctypedef unsigned cl_uint
+#  ctypedef void *cl_event
+#
+#  cl_int clEnqueueWriteBuffer(cl_command_queue queue,
+#                              cl_mem buffer,
+#                              cl_bool blocking_write,
+#                              size_t offset,
+#                              size_t cb,
+#                              const void *ptr,
+#                              cl_uint num_events_in_wait_list,
+#                              const cl_event *event_wait_list,
+#                              cl_event *event)
 
-  cl_int clEnqueueWriteBuffer(cl_command_queue queue,
-                              cl_mem buffer,
-                              cl_bool blocking_write,
-                              size_t offset,
-                              size_t cb,
-                              const void *ptr,
-                              cl_uint num_events_in_wait_list,
-                              const cl_event *event_wait_list,
-                              cl_event *event)
-                              
+cdef extern from "convolution_opencl.h":
+    void opencl_update_history_element(void *queue_ptr, void *buffer_ptr,unsigned indexoffset,unsigned elsize,void *hist_array)
+    void convolution_have_opencl(void)
+    pass
+
 cdef extern from "complex.h" nogil:
     double complex cexp(double complex)
     pass
@@ -325,8 +323,16 @@ class convolution_evaluation(object):
             pass
         assert(self.imp_resp.t0==0.0) # only designed/tested where t0==0.0
 
+        if self.gpu_context_device_queue is not None:
+            if not convolution_have_opencl():
+                print("VibroSim_WelderModel/convolution.pyx: Not compiled with OpenCL support; GPU acceleration disabled")
+                self.gpu_context_device_queue = None
+                pass
+            pass
+        
  
         if self.gpu_context_device_queue is not None:
+            
             import pyopencl as cl
             
             assert(self.gpu_precision is not None) # gpu_precision must be specified if GPU context/queue are given
@@ -404,15 +410,17 @@ class convolution_evaluation(object):
             doublehist_array=self.history
             #print("elnum=%d" % (elnum))
             #print("doublehist_array.itemsize=%d" % (doublehist_array.itemsize))
-            double_ptr = <double *>doublehist_array.data
-            double_ptr = double_ptr + elnum_c # EnqueueWriteBuffer wants a pointer just to the new data item 
-            clEnqueueWriteBuffer(c_queue,c_mem,1,elnum*doublehist_array.itemsize,doublehist_array.itemsize,double_ptr,0,NULL,NULL)
+            #double_ptr = <double *>doublehist_array.data
+            #double_ptr = double_ptr + elnum_c # EnqueueWriteBuffer wants a pointer just to the new data item 
+            opencl_update_history_element(<void *>c_queue_int_ptr, <void *>c_history_buffer_int_ptr,elnum,doublehist_array.itemsize,<void *>doublehist_array.data)
+	    #clEnqueueWriteBuffer(c_queue,c_mem,1,elnum*doublehist_array.itemsize,doublehist_array.itemsize,doublehist_array.itemsize,double_ptr,0,NULL,NULL)
             pass
         else:
             floathist_array=self.history
-            float_ptr = <float *>floathist_array.data
-            float_ptr = float_ptr + elnum_c # EnqueueWriteBuffer wants a pointer just to the new data item 
-            clEnqueueWriteBuffer(c_queue,c_mem,1,elnum*floathist_array.itemsize,floathist_array.itemsize,float_ptr,0,NULL,NULL)
+            #float_ptr = <float *>floathist_array.data
+            #float_ptr = float_ptr + elnum_c # EnqueueWriteBuffer wants a pointer just to the new data item 
+            opencl_update_history_element_double(<void *>c_queue_int_ptr, <void *>c_history_buffer_int_ptr,elnum,floathist_array.itemsize,<void *>floathist_array.data)
+            #clEnqueueWriteBuffer(c_queue,c_mem,1,elnum*floathist_array.itemsize,floathist_array.itemsize,float_ptr,0,NULL,NULL)
             pass
         pass
     
