@@ -29,6 +29,8 @@ specimen_model_file="/tmp/meas1_dynamicmodel.csv.bz2"
 #specimen_model_file=sys.argv[1]
 
 max_t = 0.05 # s
+t0_t1 = 0.02 # s
+t2_t3 = 1.0 #s
 mass_of_welder_and_slider = 2.0 # kg
 pneumatic_force = 100.0 # N
 
@@ -47,7 +49,9 @@ specimen_dict = contact_model.load_specimen_model(specimen_model_file)
 
 
 motiontable = contact_model.contact_model(specimen_dict,
-                                          max_t,
+                                          t0_t1,
+                                          t2_t3,
+                                          max_t, # t4
                                           mass_of_welder_and_slider,
                                           pneumatic_force,
                                           welder_elec_ampl,

@@ -4,6 +4,7 @@ import os
 import os.path
 import subprocess
 import re
+import numpy as np
 from setuptools import setup
 from setuptools.command.install_lib import install_lib
 from setuptools.command.install import install
@@ -15,26 +16,26 @@ from Cython.Build import cythonize
 
 extra_compile_args = {
     "msvc": ["/openmp"],
-    #"gcc": ["-O0", "-g", "-Wno-uninitialized"),    # Replace the line below with this line to enable debugging of the compiled extension
-    "gcc": ["-fopenmp","-O5","-Wno-uninitialized"],
+    #"unix": ["-O0", "-g", "-Wno-uninitialized"),    # Replace the line below with this line to enable debugging of the compiled extension
+    "unix": ["-fopenmp","-O5","-Wno-uninitialized"],
     "clang": ["-fopenmp","-O5","-Wno-uninitialized"],
 }
 
 extra_include_dirs = {
     "msvc": [".",np.get_include()],
-    "gcc": [".",np.get_include()],
+    "unix": [".",np.get_include()],
     "clang": [".",np.get_include()],
 }
 
 extra_libraries = {
     "msvc": [],
-    "gcc": ["gomp",],
+    "unix": ["gomp",],
     "clang": [],
 }
 
 extra_link_args = {
     "msvc": [],
-    "gcc": [],
+    "unix": [],
     "clang": ["-fopenmp=libomp"],
 }
 
@@ -48,50 +49,101 @@ def check_for_opencl(compiler,include_dirs,library_dirs):
             pass
         pass
 
-    if compiler=="msvc" or compiler=="mingw":
-        for library_dir in library_dirs:
-            if os.path.exists(os.path.join(library_dir,"OpenCL.lib")):
-                got_library=True
-                pass
-            pass
 
-        pass
-    else: 
-        for library_dir in library_dirs:
-            if os.path.exists(os.path.join(library_dir,"libOpenCL.so")):
-                got_library=True
-                pass
-            pass
-        pass
+    got_library =  compiler.find_library_file(library_dirs,"OpenCL")
+    #if compiler=="msvc" or compiler=="mingw":
+    #    for library_dir in library_dirs:
+    #        if os.path.exists(os.path.join(library_dir,"OpenCL.lib")):
+    #            got_library=True
+    #            pass
+    #        pass
+    #
+    #    pass
+    #else: 
+    #    for library_dir in library_dirs:
+    #        if os.path.exists(os.path.join(library_dir,"libOpenCL.so")):
+    #            got_library=True
+    #            pass
+    #        pass
+    #    pass
 
-    return (got_include and got_library)
+    return (got_include,got_library)
 
 
 class build_ext_compile_args(build_ext):
     def build_extensions(self):
         compiler=self.compiler.compiler_type
+
+        if compiler=="unix":
+            # Extract implicit include and library directories from compiler
+
+            # If we need to test for gcc vs something else here,
+            # do it based on substrings of self.compiler.compiler_so[0]
+            
+            # Run "echo | gcc -xc -e -v - -fsyntax_only" to get gcc config
+            gccproc = subprocess.Popen(self.compiler.compiler_so + ["-xc","-E","-v","-","-fsyntax-only"],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            (stdoutdata,stderrdata)=gccproc.communicate(input=b"")
+            compiler_info = stderrdata.decode('utf-8').split("\n")
+            # include directories are on lines between "#include <...> search starts here and "End of search list" and have a single space preceding: 
+            includestartidx = compiler_info.index("#include <...> search starts here:")+1
+            includeendidx = compiler_info.index("End of search list.")
+            implicit_include_dirs = [ space_include_dir[1:] for space_include_dir in compiler_info[includestartidx:includeendidx] ]
+
+            # Library directories are on a line that says LIBRARY_PATH=
+            # and are separated by colons
+            
+            for stderrline in compiler_info:
+                if stderrline.startswith("LIBRARY_PATH="):
+                    library_path_str = stderrline[13:]
+                    implicit_library_dirs = library_path_str.split(":")
+                pass
+            pass
+        else:
+
+            implicit_include_dirs = []
+            implicit_library_dirs = []
+            pass
+
+        #import pdb
+        #pdb.set_trace()
+        
         for ext in self.extensions:
             if compiler in extra_compile_args:
                 ext.extra_compile_args=extra_compile_args[compiler]
                 ext.extra_link_args=extra_link_args[compiler]
                 ext.include_dirs.extend(list(extra_include_dirs[compiler]))
                 ext.libraries.extend(list(extra_libraries[compiler]))
-
-                opencl_include_and_libraries = check_for_opencl(compiler,ext.include_dirs,ext.library_dirs)
-                if opencl_include_and_libraries:
-                    ext.define_macros.append( ("CONVOLUTION_ENABLE_OPENCL",None) )
-                    ext.libraries.append("OpenCL")
-                    pass
                 
                 pass
             else:
-                # use gcc parameters as default
-                ext.extra_compile_args=extra_compile_args["gcc"]
-                ext.extra_link_args=extra_link_args["gcc"]
-                ext.include_dirs.extend(list(extra_include_dirs["gcc"]))
-                ext.libraries.extend(extra_libraries["gcc"])
+                # use unix parameters as default
+                ext.extra_compile_args=extra_compile_args["unix"]
+                ext.extra_link_args=extra_link_args["unix"]
+                ext.include_dirs.extend(list(extra_include_dirs["unix"]))
+                ext.libraries.extend(extra_libraries["unix"])
                 pass
+
+            
+            (got_opencl_include, got_opencl_library) = check_for_opencl(self.compiler,implicit_include_dirs + ext.include_dirs,implicit_library_dirs + ext.library_dirs)
+            if got_opencl_include and got_opencl_library:
+                print("OpenCL support (GPU acceleration) enabled.")
                 
+                
+                ext.define_macros.append( ("CONVOLUTION_ENABLE_OPENCL",None) )
+                ext.libraries.append("OpenCL")
+                pass
+            if not got_opencl_include:
+                print("OpenCL include file CL/opencl.h not found in search path %s.\n" % (str(ext.include_dirs)))
+                
+                pass
+            if not got_opencl_library:
+                print("OpenCL library file (libOpenCL.so or OpenCL.lib) not found in search path %s.\n" % (str(ext.library_dirs)))
+                
+                pass
+            if not (got_opencl_include and got_opencl_library):
+                print("OpenCL support (GPU acceleration) disabled.")
+                pass
+            
             pass
             
         
@@ -158,7 +210,7 @@ print("version = %s" % (version))
 
 VibroSim_WelderModel_package_files = [ "pt_steps/*" ]
 
-ext_modules=cythonize("VibroSim_WelderModel/convolution.pyx",language="c++)
+ext_modules=cythonize("VibroSim_WelderModel/convolution.pyx",language="c++")
 #em_dict=dict([ (module.name,module) for module in ext_modules])
 #conv_pyx_ext=em_dict["VibroSim_WelderModel.convolution"]
 #conv_pyx_ext.include_dirs=["."]

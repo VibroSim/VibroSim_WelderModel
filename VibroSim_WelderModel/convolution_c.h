@@ -20,7 +20,7 @@ double rolled_inner_product_with_timereverse_c(double *history,long history_len,
 #pragma omp single
   max_threads=omp_get_max_threads();
   //printf("max_threads=%d\n",(int)max_threads);
-  accumulator=malloc(max_threads*ACCUMULATOR_PADFACTOR*sizeof(*accumulator));
+  accumulator=(double *)malloc(max_threads*ACCUMULATOR_PADFACTOR*sizeof(*accumulator));
   for (cnt=0; cnt < max_threads; cnt++) {
     accumulator[cnt*ACCUMULATOR_PADFACTOR]=0.0;
   }

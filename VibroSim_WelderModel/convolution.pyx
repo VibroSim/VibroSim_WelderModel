@@ -1,3 +1,4 @@
+# distutils: language=c++
 
 import copy
 cimport numpy as np
@@ -29,12 +30,25 @@ from libc.stdint cimport int64_t
 
 cdef extern from "convolution_opencl.h":
     void opencl_update_history_element(void *queue_ptr, void *buffer_ptr,unsigned indexoffset,unsigned elsize,void *hist_array)
-    void convolution_have_opencl(void)
+    int convolution_have_opencl()
     pass
 
-cdef extern from "complex.h" nogil:
-    double complex cexp(double complex)
+#cdef extern from "complex.h" nogil:
+#    double complex cexp(double complex)
+#    pass
+cdef extern from "complex" namespace "std" nogil:
+    cppclass complex[T]:
+        complex[T] operator-()
+        complex[T] operator*(complex[T] &)
+        complex[T] operator*(double &)
+        complex[T] operator+(complex[T] &)
+        T real()
+        T imag()
+        pass
+
+    complex[double] exp(complex[double])
     pass
+
 
 cdef extern from "convolution_c.h":
     cdef double rolled_inner_product_with_timereverse_c(double *history,long history_len,long rollshift_c,double *h,long h_len) 
@@ -279,7 +293,7 @@ class impulse_response(object):
         
         return ir
         
-    pass
+    pass 
 
 class convolution_evaluation(object):
     # NOTE: Definitions below correspond to
@@ -379,13 +393,13 @@ class convolution_evaluation(object):
         # so we have to call it manually instead
         cdef np.ndarray[dtype=np.float32_t,ndim=1,mode='c'] floathist_array
         cdef np.ndarray[dtype=np.float64_t,ndim=1,mode='c'] doublehist_array
-        cdef cl_command_queue c_queue
-        cdef cl_mem c_mem
+        #cdef cl_command_queue c_queue
+        #cdef cl_mem c_mem
         cdef unsigned long long c_queue_int_ptr
         cdef unsigned long long c_history_buffer_int_ptr
-        cdef double *double_ptr
-        cdef float *float_ptr
-        cdef unsigned elnum_c
+        #cdef double *double_ptr
+        #cdef float *float_ptr
+        #cdef unsigned elnum_c
         queue=self.gpu_context_device_queue[2]
         queue_int_ptr = queue.int_ptr
 
@@ -393,7 +407,7 @@ class convolution_evaluation(object):
         #cl.enqueue_copy(queue,self.gpu_history_buffer,self.history,is_blocking=True)
         
         #print("gpu_update_history_element(%d)=%g" % (elnum,self.history[elnum]))
-        
+         
         #print("queue_int_ptr=0x%x" % (queue_int_ptr))        
         history_buffer_int_ptr = self.gpu_history_buffer.int_ptr
         
@@ -405,7 +419,7 @@ class convolution_evaluation(object):
         c_queue = <void *>c_queue_int_ptr
         c_mem = <void *>c_history_buffer_int_ptr
 
-        elnum_c = elnum
+        #elnum_c = elnum
         if self.gpu_precision=="double":
             doublehist_array=self.history
             #print("elnum=%d" % (elnum))
@@ -419,7 +433,7 @@ class convolution_evaluation(object):
             floathist_array=self.history
             #float_ptr = <float *>floathist_array.data
             #float_ptr = float_ptr + elnum_c # EnqueueWriteBuffer wants a pointer just to the new data item 
-            opencl_update_history_element_double(<void *>c_queue_int_ptr, <void *>c_history_buffer_int_ptr,elnum,floathist_array.itemsize,<void *>floathist_array.data)
+            opencl_update_history_element(<void *>c_queue_int_ptr, <void *>c_history_buffer_int_ptr,elnum,floathist_array.itemsize,<void *>floathist_array.data)
             #clEnqueueWriteBuffer(c_queue,c_mem,1,elnum*floathist_array.itemsize,floathist_array.itemsize,float_ptr,0,NULL,NULL)
             pass
         pass
@@ -637,10 +651,10 @@ class convolution_evaluation(object):
         cdef double *fcn_c = <np.float64_t *>fcn.data
         cdef double *history_c
         cdef double *h_c = <np.float64_t *>h.data
-        cdef double complex *alpha_c = <np.complex128_t *>alpha.data 
-        cdef double complex *A_c = <np.complex128_t *>A.data 
-        cdef double complex *last_exponential_innerproduct_c
-        cdef double complex *new_exponential_innerproduct_c = <np.complex128_t *>new_exponential_innerproduct.data 
+        cdef complex[double] *alpha_c = <complex[double] *>alpha.data 
+        cdef complex[double] *A_c = <complex[double] *>A.data 
+        cdef complex[double] *last_exponential_innerproduct_c
+        cdef complex[double] *new_exponential_innerproduct_c = <complex[double] *>new_exponential_innerproduct.data 
         cdef double  *conv_evald_c = <np.float64_t *>conv_evald.data
 
         cdef int64_t nsteps=fcn.shape[0]
@@ -674,7 +688,7 @@ class convolution_evaluation(object):
 
 
         history_c = <np.float64_t *>history.data
-        last_exponential_innerproduct_c = <np.complex128_t *>last_exponential_innerproduct.data
+        last_exponential_innerproduct_c = <complex[double] *>last_exponential_innerproduct.data
         
         assert(A.shape[0]==nalpha)
         
@@ -715,8 +729,8 @@ class convolution_evaluation(object):
                 #res+=np.sum(new_exponential_innerproduct)
 
                 for alphacnt in range(nalpha):
-                    new_exponential_innerproduct_c[alphacnt] = last_exponential_innerproduct_c[alphacnt]*cexp(-alpha_c[alphacnt]*dt) + veryold_F*A_c[alphacnt]*cexp(-alpha_c[alphacnt]*dt*(<double>nh))*dt
-                    res += new_exponential_innerproduct_c[alphacnt].real
+                    new_exponential_innerproduct_c[alphacnt] = last_exponential_innerproduct_c[alphacnt]*exp(-alpha_c[alphacnt]*dt) + A_c[alphacnt]*veryold_F*exp(-alpha_c[alphacnt]*dt*(<double>nh))*dt
+                    res += new_exponential_innerproduct_c[alphacnt].real()
                     pass
                 
                 #printf("res now %g\n",res)
