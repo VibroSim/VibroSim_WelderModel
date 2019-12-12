@@ -28,7 +28,7 @@ from libc.stdint cimport int64_t
 #                              const cl_event *event_wait_list,
 #                              cl_event *event)
 
-cdef extern from "convolution_opencl.h":
+cdef extern from "convolution_opencl.h" nogil:
     void opencl_update_history_element(void *queue_ptr, void *buffer_ptr,unsigned indexoffset,unsigned elsize,void *hist_array)
     int convolution_have_opencl()
     pass
