@@ -73,9 +73,18 @@ def run(dc_dest_href,
                                    gpu_context_device_queue=gpu_context_device_queue,
                                    gpu_precision=dc_gpu_precision_str)
     
-    
+    # make sure our destination directory exists
+    if not os.path.exists(dc_dest_href.getpath()):
+        dest_dir = dc_dest_href.getpath()
+        if dest_dir.endswith(os.path.sep):
+            dest_dir=dest_dir[:-1]
+            pass
+        os.mkdir(dest_dir)
+        pass    
+        
     # Save motiontable CSV and add to return dictionary
     motiontable_href = hrefv(quote("%s_motiontable.csv.bz2" % (dc_measident_str)),dc_dest_href)
+
     cm.write_motiontable(motiontable,motiontable_href.getpath())
     ret = {
         "dc:motion": motiontable_href,

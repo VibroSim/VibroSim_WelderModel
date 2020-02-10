@@ -139,7 +139,7 @@ def select_gpu_device(priority_list_str):
 
 def load_specimen_model(specimen_model_filepath):
     import pandas as pd
-    specimen_dataframe = pd.read_csv(specimen_model_filepath,index_col=0)
+    specimen_dataframe = pd.read_csv(specimen_model_filepath,index_col="Time(s)")
     
     #dt=specimen_dataframe["Time(s)"][1]-specimen_dataframe["Time(s)"][0]
     dt=specimen_dataframe.index[1]-specimen_dataframe.index[0]

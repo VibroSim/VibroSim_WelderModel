@@ -27,6 +27,7 @@ versionpath = os.path.join(pkgdir,"version.txt")
 if os.path.exists(versionpath):
     versionfh = open(versionpath,"r")
     __version__=versionfh.read().strip()
+    versionfh.close()
     pass
 else:
     __version__="UNINSTALLED"
