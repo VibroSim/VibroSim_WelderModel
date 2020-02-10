@@ -575,9 +575,13 @@ def plot_contact(motiontable):
 
     max_t_plot = np.max(trange)
     
-    frange = np.arange(trange.shape[0],dtype='d')/(trange.shape[0]*dt)
-    frange[trange.shape[0]//2:] -= 1.0/dt
-    frange[trange.shape[0]//2]=np.nan
+    # round length up to next power-of-two size 
+    # so we don't get bogged down if trange.shape[0] is prime
+    fft_len = 1 << int(np.ceil(np.log(trange.shape[0])/np.log(2)))
+    
+    frange = np.arange(fft_len,dtype='d')/(fft_len*dt)
+    frange[fft_len//2:] -= 1.0/dt
+    frange[fft_len//2]=np.nan
 
     welder_tip_z_history = motiontable["welder_tip_z_history(m)"]
     specimen_z_history = motiontable["specimen_z_history(m)"]
@@ -599,9 +603,9 @@ def plot_contact(motiontable):
     pl.clf()
     pl.title("Welder and specimen velocity spectrum")
     pl.plot(frange/1e3,
-            np.abs(np.fft.fft(motiontable["welder_tip_tip_resp(m/(N*s))"])*dt*(2.0*np.pi*np.abs(frange))),'-',
+            np.abs(np.fft.fft(motiontable["welder_tip_tip_resp(m/(N*s))"],n=fft_len)*dt*(2.0*np.pi*np.abs(frange))),'-',
             frange/1e3,
-            np.abs(np.fft.fft(motiontable["specimen_resp(m/(N*s))"])*dt*(2.0*np.pi*np.abs(frange))),'--')
+            np.abs(np.fft.fft(motiontable["specimen_resp(m/(N*s))"],n=fft_len)*dt*(2.0*np.pi*np.abs(frange))),'--')
     pl.xlabel('Frequency (kHz)')
     pl.ylabel('Velocity spectrum (m/s/Hz)')
     pl.legend(('Welder','Specimen'))
@@ -616,9 +620,9 @@ def plot_contact(motiontable):
     pl.clf()
     pl.title("Welder and specimen velocity phase spectrum")
     pl.plot(frange/1e3,
-            np.angle(-np.fft.fft(motiontable["welder_tip_tip_resp(m/(N*s))"])*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'-',
+            np.angle(-np.fft.fft(motiontable["welder_tip_tip_resp(m/(N*s))"],n=fft_len)*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'-',
             frange/1e3,
-            np.angle(np.fft.fft(motiontable["specimen_resp(m/(N*s))"])*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'--')
+            np.angle(np.fft.fft(motiontable["specimen_resp(m/(N*s))"],n=fft_len)*dt*((0+1j)*2.0*np.pi*np.abs(frange))),'--')
     pl.xlabel('Frequency (kHz)')
     pl.ylabel('Phase angle (rad)')
     pl.legend(('Welder','Specimen'))
@@ -672,7 +676,7 @@ def plot_contact(motiontable):
     contactspectrum_plot = pl.figure()
     pl.clf()
     # Impulse between .28*.33
-    pl.plot(frange/1e3,np.abs(np.fft.fft(contact_F_history)*dt))
+    pl.plot(frange/1e3,np.abs(np.fft.fft(contact_F_history,n=fft_len)*dt))
     #pl.axis((0,max_t_plot*1.e3,0,20000))
     pl.xlabel('Frequency (kHz)')
     pl.ylabel('Force spectrum (N/Hz)')
@@ -710,7 +714,7 @@ def plot_contact(motiontable):
     
     contactvelspec_plot = pl.figure()
     pl.clf()
-    pl.plot(frange/1.e3,np.abs(np.fft.fft(specimen_z_history)*dt*(2.0*np.pi*frange)),'-')
+    pl.plot(frange/1.e3,np.abs(np.fft.fft(specimen_z_history,n=fft_len)*dt*(2.0*np.pi*frange)),'-')
     #pl.axis((0,55,-1000,500))
     pl.xlabel('Frequency (kHz)')
     pl.ylabel('Velocity spectrum (m/s)/Hz')
