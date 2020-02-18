@@ -156,7 +156,7 @@ def load_specimen_model(specimen_model_filepath):
         if unitstartidx < 0: 
             raise ValueError("Dynamic model column name \"%s\" does not include units" % (column))
         fieldname=column[:unitstartidx]
-        fieldunits_with_close_paren=column[unitstartidx:].strip()
+        fieldunits_with_close_paren=column[(unitstartidx+1):].strip()
         if not fieldunits_with_close_paren.endswith(")"):
             raise ValueError("Dynamic model column \"%s\" units do not end with close parentheses" % (column))
         fieldunits = fieldunits_with_close_paren[:-1]
