@@ -8,7 +8,7 @@
 double rolled_inner_product_with_timereverse_c(double *history,long history_len,long rollshift_c,double *h,long h_len)
 {
 
-  size_t iter;
+  long iter;
   size_t cnt;
   double *accumulator;
   double total=0.0;
