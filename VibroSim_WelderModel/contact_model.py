@@ -11,6 +11,7 @@ import numpy
 import numpy as np
 import pandas as pd
 
+from limatix.lm_units import parseunits,multiplyunits,printunits
 
 from matplotlib import pyplot as pl
 #import pyximport
@@ -147,10 +148,21 @@ def load_specimen_model(specimen_model_filepath):
     assert(specimen_dataframe.index[0]==0.0)
     
     specimen_dict=collections.OrderedDict()    
+    specimen_units_dict=collections.OrderedDict()    
     for column in specimen_dataframe.columns:
         if column=="Time(s)":
             continue
-        specimen_dict[column.split("(")[0]]=convolution.impulse_response(
+        unitstartidx = column.find("(")
+        if unitstartidx < 0: 
+            raise ValueError("Dynamic model column name \"%s\" does not include units" % (column))
+        fieldname=column[:unitstartidx]
+        fieldunits_with_close_paren=column[unitstartidx:].strip()
+        if not fieldunits_with_close_paren.endswith(")"):
+            raise ValueError("Dynamic model column \"%s\" units do not end with close parentheses" % (column))
+        fieldunits = fieldunits_with_close_paren[:-1]
+        
+        
+        specimen_dict[fieldname]=convolution.impulse_response(
             h=np.array(specimen_dataframe[column]),
             dt=dt,
             t0=0.0,
@@ -158,12 +170,15 @@ def load_specimen_model(specimen_model_filepath):
             D=0.0,
             alpha=np.array((1.0,),dtype='d'))
         
+        
+        specimen_units_dict[fieldname]=fieldunits
         pass
 
-    return specimen_dict # keys are "specimen_resp", etc.; values are impulse_response instances
+    return (specimen_dict,specimen_units_dict) # keys are "specimen_resp", etc.; values are impulse_response instances
 
 
 def contact_model(specimen_dict,
+                  specimen_units_dict,
                   t0_t1, # Excitation start time (seconds)
                   t2_t3, # Excitation end time (seconds)
                   t4, # Time to calculate out to (seconds)
@@ -185,7 +200,7 @@ def contact_model(specimen_dict,
     #gpu_precision="double"
     #gpu_context_device_queue=None # Temporarily disable GPU
 
-    #specimen_dict=load_specimen_model(specimen_model_fpath)
+    #s(pecimen_dict,specimen_units_dict)=load_specimen_model(specimen_model_fpath)
 
     # IDEA: Add small uniform real part to specimen_resp in frequency domain
     # To keep the phase away from the edge.... FAILED
@@ -349,8 +364,17 @@ def contact_model(specimen_dict,
     # (laser point velocity, crack normal stress, etc.)
     specimen_dict_conv=collections.OrderedDict()
     specimen_dict_history=collections.OrderedDict()
-    for specimen_motion_characteristic in specimen_dict:
-        specimen_dict_conv[specimen_motion_characteristic] = convolution_evaluation.quiescent_from_imp_resp(specimen_dict[specimen_motion_characteristic],pneumatic_force-welder_overall_pos*welder_spring_constant,gpu_context_device_queue=gpu_context_device_queue,gpu_precision=gpu_precision)
+    for specimen_motion_name in specimen_dict:
+        original_unit_str = specimen_units_dict[specimen_motion_name]
+        original_units = parseunits(original_unit_str)
+        
+        # Convolving with force as a function multiplies by Newton seconds
+        convolve_units = parseunits("N*s")
+        convolution_units = multiplyunits(original_units,convolve_units)
+
+        specimen_motion_characteristic="%s(%s)" % (specimen_motion_name,printunits(convolution_units))
+        
+        specimen_dict_conv[specimen_motion_characteristic] = convolution_evaluation.quiescent_from_imp_resp(specimen_dict[specimen_motion_name],pneumatic_force-welder_overall_pos*welder_spring_constant,gpu_context_device_queue=gpu_context_device_queue,gpu_precision=gpu_precision)
 
         specimen_dict_history[specimen_motion_characteristic]=np.zeros(trange.shape[0],dtype='d')
 
@@ -566,7 +590,7 @@ def write_motiontable(motiontable,output_filename):
 
 
 
-def plot_contact(motiontable):
+def plot_contact(motiontable,exc_t0):
 
     trange = np.array(motiontable.index) # ["Time(s)"]
     dt=trange[1]-trange[0]
@@ -645,8 +669,8 @@ def plot_contact(motiontable):
     
     dispzoom_plot = pl.figure()
     pl.clf()
-    fig5_tstart = 5e-3
-    fig5_tend = 6e-3
+    fig5_tstart = exc_t0 - 0.1e-3 #5e-3
+    fig5_tend = exc_t0 + 0.9e-3 # 6e-3
     pl.plot(trange*1e3,specimen_z_history*1e6,'-',
             trange*1.e3,welder_tip_z_history*1e6,'-')
     pl.axis((fig5_tstart*1e3,fig5_tend*1e3,min(np.min(specimen_z_history[(trange >= fig5_tstart) & (trange <= fig5_tend)]*1e6),np.min(welder_tip_z_history[(trange >= fig5_tstart) & (trange <= fig5_tend)]*1e6)),max(np.max(specimen_z_history[(trange >= fig5_tstart) & (trange <= fig5_tend)]*1e6),np.max(welder_tip_z_history[(trange >= fig5_tstart) & (trange <= fig5_tend)]*1e6))))

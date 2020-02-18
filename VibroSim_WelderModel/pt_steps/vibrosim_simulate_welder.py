@@ -43,7 +43,7 @@ def run(dc_dest_href,
         dc_gpu_device_priority_list_str = "", # string containing python-style list of tuples of quoted strings with (platform name, device name) in priority order e.g. "[('NVIDIA CUDA','Quadro GP100'), ('Intel(R) OpenCL HD Graphics','Intel(R) Gen9 HD Graphics NEO'), ('Portable Computing Language', 'pthread-AMD EPYC 7351P 16-Core Processor')]". These names are shown under "Device Name" by the clinfo command. if "" is provided then acceleration will not be used. 
         dc_gpu_precision_str = cm.default_gpu_precision):
     
-    specimen_dict = cm.load_specimen_model(dc_dynamicmodel_href.getpath())
+    (specimen_dict,specimen_units_dict) = cm.load_specimen_model(dc_dynamicmodel_href.getpath())
 
 
     gpu_context_device_queue = cm.select_gpu_device(dc_gpu_device_priority_list_str)
@@ -59,6 +59,7 @@ def run(dc_dest_href,
     #from VibroSim_Simulator.function_as_script import scriptify
 
     motiontable = cm.contact_model(specimen_dict,
+                                   specimen_units_dict,
                                    dc_exc_t0_numericunits.value("s"),
                                    dc_exc_t2_numericunits.value("s"),
                                    dc_exc_t4_numericunits.value("s"),

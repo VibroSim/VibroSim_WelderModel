@@ -33,18 +33,19 @@ def main(args=None):
         args=sys.argv
         pass
     
-    if len(args) < 2:
-        print("Usage: %s <motionfile.csv.bz2>" % (args[0]))
+    if len(args) < 3:
+        print("Usage: %s <motionfile.csv.bz2> <exc_t0>" % (args[0]))
         sys.exit(0)
         pass
 
     motionfile = args[1]
+    exc_t0 = float(args[2])
 
     motiontable = pd.read_csv(motionfile,index_col=0)
     
 
     # Generate plots
-    plotdict = contact_model.plot_contact(motiontable)
+    plotdict = contact_model.plot_contact(motiontable,exc_t0)
     
     ret = collections.OrderedDict()
 

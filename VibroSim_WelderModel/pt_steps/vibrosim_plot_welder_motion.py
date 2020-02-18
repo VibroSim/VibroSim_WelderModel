@@ -29,13 +29,14 @@ from VibroSim_WelderModel import contact_model
 
 def run(dc_dest_href,
         dc_measident_str,
-        dc_motion_href):
+        dc_motion_href,
+        dc_exc_t0_numericunits):
 
     motiontable = pd.read_csv(dc_motion_href.getpath(),index_col=0)
     
 
     # Generate plots
-    plotdict = contact_model.plot_contact(motiontable)
+    plotdict = contact_model.plot_contact(motiontable,dc_exc_t0_numericunits.value("s"))
     
     ret = collections.OrderedDict()
 
