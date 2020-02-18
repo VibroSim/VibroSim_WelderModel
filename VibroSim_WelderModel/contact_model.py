@@ -610,7 +610,7 @@ def plot_contact(motiontable,exc_t0):
     welder_tip_z_history = motiontable["welder_tip_z_history(m)"]
     specimen_z_history = motiontable["specimen_z_history(m)"]
     contact_F_history = motiontable["contact_F_history(N)"]
-    
+    specimen_laser_vel_history = motiontable["specimen_laser(m/s)"]
     
     impresp_plot=pl.figure()
     pl.clf()
@@ -747,6 +747,29 @@ def plot_contact(motiontable,exc_t0):
     pl.grid()
     
 
+
+    laservel_plot = pl.figure()
+    pl.clf()
+    pl.plot(trange*1e3,specimen_laser_vel_history,'-')
+    pl.xlabel('Time (ms)')
+    pl.ylabel('Velocity (m/s)')
+    pl.title('Laser spot surface velocity (synthetic vibrometer)')
+    #pl.axis((0,1,-3,1))
+    pl.grid()
+    
+    laservelspec_plot = pl.figure()
+    pl.clf()
+    pl.plot(frange/1.e3,np.abs(np.fft.fft(specimen_laser_vel_history,n=fft_len)*dt),'-')
+    #pl.axis((0,55,-1000,500))
+    pl.xlabel('Frequency (kHz)')
+    pl.ylabel('Velocity spectrum (m/s)/Hz')
+    pl.title('Laser spot surface velocity spectrum (synthetic vibrometer)')
+    #pl.axis((0,1,-3,1))
+    pl.grid()
+    
+
+
+
     plotdict = {
         "impulse_response": impresp_plot,
         "velocity_spectrum": velspec_plot,
@@ -757,6 +780,8 @@ def plot_contact(motiontable,exc_t0):
         "contact_spectrum": contactspectrum_plot,
         "overlap": overlap_plot,
         "contact_velocity": contactvel_plot,
-        "contact_velocity_spectrum": contactvelspec_plot
+        "contact_velocity_spectrum": contactvelspec_plot,
+        "laser_velocity": laservel_plot,
+        "laser_velocity_spectrum": laservelspec_plot,
     }
     return plotdict
