@@ -421,6 +421,14 @@ def contact_model(specimen_dict,
     for tcnt in range(trange.shape[0]):
         if tcnt % 10000 == 0:
             print("tcnt=%d/%d" % (tcnt,trange.shape[0]))
+
+            # memory leak debugging
+            #import tracemalloc
+            #snapshot=tracemalloc.take_snapshot()
+            #top_stats=snapshot.statistics('lineno')
+            #print("Top 25:")
+            #print("\n".join([str(stat) for stat in top_stats[:25]]))
+            #print(" ")
             pass
     
 

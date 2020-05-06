@@ -35,6 +35,7 @@ double rolled_inner_product_with_timereverse_c(double *history,long history_len,
   for (cnt=0; cnt < max_threads; cnt++) {
     total += accumulator[cnt*ACCUMULATOR_PADFACTOR];
   }
+  free(accumulator);
 
   return total;
 }
