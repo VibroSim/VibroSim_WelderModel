@@ -21,6 +21,7 @@ except ImportError:
 import pandas as pd
 
 from matplotlib import pyplot as pl
+from matplotlib import rcParams
 
 from limatix.dc_value import numericunitsvalue as numericunitsv
 from limatix.dc_value import hrefvalue as hrefv
@@ -34,7 +35,15 @@ def run(dc_dest_href,
 
     motiontable = pd.read_csv(dc_motion_href.getpath(),index_col=0)
     
-
+    # At least some matplotlib versions fail plotting super long 
+    # paths if agg.path.chunksize==0
+    # Temporarily update this parameter
+    oldchunksize=None
+    if "agg.path.chunksize" in rcParams and rcParams["agg.path.chunksize"]==0:
+        oldchunksize = rcParams["agg.path.chunksize"]
+        rcParams["agg.path.chunksize"]=20000
+        pass
+    
     # Generate plots
     plotdict = contact_model.plot_contact(motiontable,dc_exc_t0_numericunits.value("s"))
     
@@ -48,4 +57,8 @@ def run(dc_dest_href,
         ret["dc:%s_plot" % (plotdescr)] = plot_href
         pass
     
+    if oldchunksize is not None:
+        rcParams["agg.path.chunksize"] = oldchunksize
+        pass
+
     return ret
