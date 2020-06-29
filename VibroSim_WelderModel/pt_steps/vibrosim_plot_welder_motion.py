@@ -60,5 +60,5 @@ def run(dc_dest_href,
     if oldchunksize is not None:
         rcParams["agg.path.chunksize"] = oldchunksize
         pass
-
+    pl.close('all') # Free up memory
     return ret
