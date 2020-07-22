@@ -60,5 +60,8 @@ def run(dc_dest_href,
     if oldchunksize is not None:
         rcParams["agg.path.chunksize"] = oldchunksize
         pass
-    pl.close('all') # Free up memory
+    if not(__processtrak_interactive): 
+        pl.close('all') # Free up memory by closing plots unless we are in interactive mode
+        pass
+
     return ret
